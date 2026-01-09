@@ -138,8 +138,10 @@ class TextChunker:
             chunks.append(chunk_text)
 
             # 다음 시작점 계산 (오버랩 적용)
-            # 최소한 1 토큰은 전진해야 무한 루프 방지
-            step = max(1, len(chunk_tokens) - overlap)
+            # 최소한 (max_tokens - overlap)만큼 전진해야 무한 루프/과도한 청크 방지
+            # 문장 경계 자르기로 인해 청크가 작아져도 원래 계획대로 전진
+            min_step = max(1, max_tokens - overlap)
+            step = max(min_step, len(chunk_tokens) - overlap)
             start = start + step
 
             # 끝에 도달하면 종료

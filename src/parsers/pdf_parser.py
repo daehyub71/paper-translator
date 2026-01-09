@@ -52,7 +52,9 @@ class PDFParser:
         r"Approach|Model|Architecture|Experiment|Results|Discussion|Conclusion|"
         r"Acknowledgment|References|Appendix|Supplementary)s?)\s*$",
         r"^(\d+\.)\s+([A-Z][a-zA-Z\s]+)$",  # "1. Introduction"
-        r"^([A-Z][A-Z\s]+)$",  # "ABSTRACT", "INTRODUCTION"
+        r"^(ABSTRACT|INTRODUCTION|BACKGROUND|RELATED WORK|METHOD(?:S|OLOGY)?|"
+        r"EXPERIMENT(?:S)?|RESULTS?|DISCUSSION|CONCLUSION(?:S)?|ACKNOWLEDGMENT(?:S)?|"
+        r"REFERENCES|APPENDIX)\s*$",  # All caps known headers only
     ]
 
     # LaTeX 수식 패턴 (보존용)
