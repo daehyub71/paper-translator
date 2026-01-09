@@ -1,0 +1,32 @@
+# Paper Translator Configuration
+# 환경변수로 오버라이드 가능: OPENAI_MODEL, SUPABASE_URL 등
+
+translation:
+  model: "gpt-4o-mini"            # 환경변수 OPENAI_MODEL로 오버라이드 가능
+  temperature: 0.1
+  max_tokens_per_chunk: 4000
+
+chunking:
+  strategy: "hybrid"              # 'section' | 'token' | 'hybrid'
+  max_chunk_tokens: 3000
+  overlap_tokens: 200
+
+pdf_parsing:
+  keep_formulas: true             # 수식 유지 (LaTeX)
+  translate_tables: true          # 표 내용 번역
+  exclude_references: true        # References 섹션 제외
+
+terminology:
+  pre_process_limit: 30           # 프롬프트에 포함할 최대 용어 수
+  post_process_threshold: 0.8     # 후처리 용어 매칭 신뢰도 임계값
+
+output:
+  directory: "./translations"
+  filename_format: "{date}_{title}"   # 파일명 포맷
+
+feedback:
+  auto_sync: false                # 자동 동기화 (false = 수동 sync 명령)
+
+cache:
+  enabled: true                   # Redis 캐싱 활성화
+  ttl_seconds: 86400              # 캐시 만료 시간 (24시간)

@@ -1,0 +1,59 @@
+# {{ title_ko }}
+
+> **원제**: {{ title }}
+{% if arxiv_id %}> **ArXiv**: [{{ arxiv_id }}](https://arxiv.org/abs/{{ arxiv_id }}){% endif %}
+{% if authors %}> **저자**: {{ authors | join(", ") }}{% endif %}
+> **번역일**: {{ translated_date }}
+{% if domain %}> **분야**: {{ domain }}{% endif %}
+
+---
+
+{% if abstract %}
+## 초록 (Abstract)
+
+{{ abstract }}
+
+---
+{% endif %}
+
+{% for section in sections %}
+## {{ section.title_ko if section.title_ko else section.title }}
+
+{{ section.content }}
+
+{% if section.tables %}
+{% for table in section.tables %}
+{{ table }}
+
+{% endfor %}
+{% endif %}
+{% endfor %}
+
+---
+
+## 번역 정보
+
+| 항목 | 값 |
+|------|-----|
+| 원본 페이지 | {{ total_pages }} |
+| 총 청크 수 | {{ total_chunks }} |
+| 번역 토큰 | {{ total_tokens | default("N/A") }} |
+| 번역 비용 | {{ estimated_cost | default("N/A") }} |
+| 용어 매칭률 | {{ term_match_rate | default("N/A") }} |
+
+{% if terminology_used %}
+### 사용된 전문용어
+
+| 원문 | 번역 |
+|------|------|
+{% for term in terminology_used[:20] %}
+| {{ term.source }} | {{ term.target }} |
+{% endfor %}
+{% if terminology_used | length > 20 %}
+| ... | ({{ terminology_used | length - 20 }}개 더) |
+{% endif %}
+{% endif %}
+
+---
+
+*이 문서는 [Paper Translator](https://github.com/daehyub71/paper-translator)를 사용하여 자동 번역되었습니다.*
