@@ -31,6 +31,7 @@ from src.collectors import (
     SemanticScholarCollector,
     ArxivPaper,
     SemanticScholarPaper,
+    RateLimitError,
 )
 
 # 콘솔 및 앱 초기화
@@ -1163,6 +1164,19 @@ def discover(
     except KeyboardInterrupt:
         print_warning("\n검색이 중단되었습니다.")
         raise typer.Exit(130)
+    except RateLimitError as e:
+        print_error(f"API 요청 제한 초과")
+        console.print()
+        console.print("[yellow]해결 방법:[/yellow]")
+        console.print("  1. 몇 분 후 다시 시도")
+        console.print("  2. Semantic Scholar API 키 발급 (무료):")
+        console.print("     [dim]https://www.semanticscholar.org/product/api#api-key-form[/dim]")
+        console.print("  3. 환경변수로 API 키 설정:")
+        console.print("     [dim]export SEMANTIC_SCHOLAR_API_KEY=your_key[/dim]")
+        console.print()
+        console.print("[dim]또는 ArXiv를 사용해 보세요:[/dim]")
+        console.print(f"  [dim]paper-translator discover --source arxiv --domain {domain} --trending[/dim]")
+        raise typer.Exit(1)
     except Exception as e:
         print_error(f"검색 실패: {e}")
         if verbose:

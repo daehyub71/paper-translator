@@ -12,6 +12,7 @@ from .arxiv_collector import (
 from .semantic_scholar_collector import (
     SemanticScholarCollector,
     SemanticScholarPaper,
+    RateLimitError,
     search_semantic_scholar,
     get_highly_cited_papers,
 )
@@ -25,6 +26,7 @@ __all__ = [
     # Semantic Scholar
     "SemanticScholarCollector",
     "SemanticScholarPaper",
+    "RateLimitError",
     "search_semantic_scholar",
     "get_highly_cited_papers",
 ]

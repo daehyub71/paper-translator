@@ -3,6 +3,7 @@ Semantic Scholar 논문 수집기
 Semantic Scholar API를 통한 인용수 기반 논문 검색
 """
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,9 +14,16 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+class RateLimitError(Exception):
+    """Rate limit 초과 에러"""
+    pass
+
+
 # Semantic Scholar API 설정
 S2_API_BASE = "https://api.semanticscholar.org/graph/v1"
-S2_RATE_LIMIT_DELAY = 1.0  # 초 (무료 API 제한)
+S2_RATE_LIMIT_DELAY = 3.0  # 초 (무료 API 제한 - 더 보수적으로)
+S2_MAX_RETRIES = 3  # 최대 재시도 횟수
+S2_RETRY_DELAY = 5.0  # 재시도 대기 시간 (초)
 
 
 # 분야별 검색 키워드
@@ -93,36 +101,61 @@ class SemanticScholarCollector:
         """
         Args:
             api_key: Semantic Scholar API 키 (선택, 없으면 rate limit 적용)
+                     환경변수 SEMANTIC_SCHOLAR_API_KEY로도 설정 가능
             max_results: 기본 검색 결과 수
         """
-        self.api_key = api_key
+        # API 키: 인자 > 환경변수 > None
+        self.api_key = api_key or os.environ.get("SEMANTIC_SCHOLAR_API_KEY")
         self.max_results = max_results
         self.session = requests.Session()
 
-        if api_key:
-            self.session.headers["x-api-key"] = api_key
+        if self.api_key:
+            self.session.headers["x-api-key"] = self.api_key
+            logger.info("Semantic Scholar API 키 사용 중")
 
     def _make_request(
         self,
         endpoint: str,
         params: Optional[dict] = None,
     ) -> dict:
-        """API 요청"""
+        """API 요청 (재시도 로직 포함)"""
         url = f"{S2_API_BASE}/{endpoint}"
 
-        try:
-            response = self.session.get(url, params=params, timeout=30)
-            response.raise_for_status()
+        # 요청 전 rate limit 대기 (무료 API)
+        if not self.api_key:
+            time.sleep(S2_RATE_LIMIT_DELAY)
 
-            # Rate limiting (API 키 없으면 필수)
-            if not self.api_key:
-                time.sleep(S2_RATE_LIMIT_DELAY)
+        for attempt in range(S2_MAX_RETRIES):
+            try:
+                response = self.session.get(url, params=params, timeout=30)
 
-            return response.json()
+                # 429 Too Many Requests - 재시도
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", S2_RETRY_DELAY))
+                    wait_time = max(retry_after, S2_RETRY_DELAY * (attempt + 1))
+                    logger.warning(
+                        f"Rate limit 도달. {wait_time}초 후 재시도... ({attempt + 1}/{S2_MAX_RETRIES})"
+                    )
+                    time.sleep(wait_time)
+                    continue
 
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Semantic Scholar API 요청 실패: {e}")
-            raise
+                response.raise_for_status()
+                return response.json()
+
+            except requests.exceptions.RequestException as e:
+                if attempt < S2_MAX_RETRIES - 1:
+                    logger.warning(f"요청 실패, 재시도 중... ({attempt + 1}/{S2_MAX_RETRIES}): {e}")
+                    time.sleep(S2_RETRY_DELAY * (attempt + 1))
+                else:
+                    logger.error(f"Semantic Scholar API 요청 실패: {e}")
+                    raise
+
+        # 모든 재시도 실패 - rate limit인 경우 별도 에러
+        raise RateLimitError(
+            f"Semantic Scholar API rate limit 초과. "
+            f"잠시 후 다시 시도하거나, API 키를 사용하세요. "
+            f"(https://www.semanticscholar.org/product/api#api-key-form)"
+        )
 
     def _parse_paper(self, data: dict) -> SemanticScholarPaper:
         """API 응답을 SemanticScholarPaper로 변환"""
