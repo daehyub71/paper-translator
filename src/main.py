@@ -902,10 +902,11 @@ def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
     """ArXiv 논문 테이블 생성"""
     table = Table(title=f"ArXiv 논문 ({len(papers)}개)", show_header=True, header_style="bold cyan")
     table.add_column("#", style="dim", width=3)
-    table.add_column("제목", style="white", max_width=50)
-    table.add_column("저자", style="dim", max_width=25)
-    table.add_column("카테고리", style="yellow", width=10)
-    table.add_column("날짜", style="green", width=12)
+    table.add_column("ArXiv ID", style="cyan", width=15)
+    table.add_column("제목", style="white", max_width=45)
+    table.add_column("저자", style="dim", max_width=20)
+    table.add_column("카테고리", style="yellow", width=8)
+    table.add_column("날짜", style="green", width=10)
 
     for idx, paper in enumerate(papers, 1):
         authors = ", ".join(paper.authors[:2])
@@ -914,8 +915,9 @@ def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
 
         table.add_row(
             str(idx),
-            paper.title[:50] + "..." if len(paper.title) > 50 else paper.title,
-            authors[:25] + "..." if len(authors) > 25 else authors,
+            paper.arxiv_id,
+            paper.title[:45] + "..." if len(paper.title) > 45 else paper.title,
+            authors[:20] + "..." if len(authors) > 20 else authors,
             paper.primary_category,
             paper.published.strftime("%Y-%m-%d"),
         )
