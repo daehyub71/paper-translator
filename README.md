@@ -10,6 +10,7 @@ Paper Translator is an automated system that translates AI research papers (PDFs
 
 | Feature | Description |
 |---------|-------------|
+| Paper Discovery | Search papers via ArXiv API and Semantic Scholar (citation-based filtering) |
 | Full PDF Translation | Download and translate entire ArXiv paper PDFs |
 | Terminology Mapping | Word/phrase-level term DB management with domain classification |
 | Hybrid Term Application | Pre-translation (prompt injection) + Post-translation (validation) |
@@ -25,6 +26,7 @@ Paper Translator is an automated system that translates AI research papers (PDFs
 | LLM | OpenAI GPT-4o-mini |
 | Orchestration | LangGraph |
 | PDF Parsing | PyPDF2 / pdfplumber |
+| Paper Discovery | arxiv (ArXiv API) / requests (Semantic Scholar API) |
 | Database | Supabase (PostgreSQL) |
 | Template | Jinja2 (Markdown generation) |
 | CLI | Typer + Rich |
@@ -82,6 +84,42 @@ python scripts/seed_terminology.py
 ## Usage
 
 ### CLI Commands
+
+#### Discover Papers
+
+Search and discover papers from ArXiv or Semantic Scholar:
+
+```bash
+# Search ArXiv for trending NLP papers
+python -m src.main discover --source arxiv --domain NLP --trending
+
+# Search ArXiv with query
+python -m src.main discover --source arxiv --query "transformer" --domain NLP
+
+# Search Semantic Scholar for highly cited papers
+python -m src.main discover --source semantic-scholar --domain ML --highly-cited
+
+# Search with minimum citation filter
+python -m src.main discover --source semantic-scholar --query "BERT" --min-citations 100
+
+# Show detailed information
+python -m src.main discover --source arxiv --domain CV --trending --verbose
+```
+
+**Discover Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--source` | Search source: `arxiv`, `semantic-scholar` (or `s2`) |
+| `--query` | Search query |
+| `--domain` | Domain filter: NLP, CV, ML, RL, Speech, General |
+| `--max-results` | Maximum results (default: 10) |
+| `--min-citations` | Minimum citations (Semantic Scholar only) |
+| `--year-from` | Filter by start year |
+| `--trending` | Get trending/recent papers |
+| `--highly-cited` | Get highly cited papers (Semantic Scholar only) |
+| `--verbose` | Show detailed paper information |
+| `--json` | Output as JSON |
 
 #### Translate Papers
 
@@ -179,6 +217,9 @@ paper-translator/
 │   ├── api/                    # External integration interfaces
 │   │   ├── interface.py        # TranslationRequest/Response
 │   │   └── insightbot.py       # InsightBot integration
+│   ├── collectors/             # Paper discovery
+│   │   ├── arxiv_collector.py  # ArXiv API client
+│   │   └── semantic_scholar_collector.py  # Semantic Scholar API
 │   ├── db/                     # Database layer
 │   │   ├── supabase_client.py  # Supabase client
 │   │   └── repositories.py     # CRUD repositories
@@ -289,8 +330,11 @@ pytest tests/test_translator.py -v
 | SUPABASE_KEY | Yes | Supabase anon key |
 | SUPABASE_SERVICE_ROLE_KEY | No | Supabase service role key |
 | SUPABASE_DATABASE_URL | No | PostgreSQL direct connection URL |
+| SEMANTIC_SCHOLAR_API_KEY | No | Semantic Scholar API key (reduces rate limits) |
 | UPSTASH_URL | No | Redis cache URL (optional) |
 | UPSTASH_TOKEN | No | Redis auth token (optional) |
+
+> **Note:** Get a free Semantic Scholar API key at https://www.semanticscholar.org/product/api#api-key-form
 
 ## Database Schema
 

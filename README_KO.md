@@ -10,6 +10,7 @@ Paper Translator는 ArXiv 등의 AI 연구 논문 PDF를 한국어로 번역하�
 
 | 기능 | 설명 |
 |-----|------|
+| 논문 검색 | ArXiv API와 Semantic Scholar로 논문 검색 (인용수 기반 필터링) |
 | PDF 전체 번역 | ArXiv 논문 PDF를 다운로드하여 전체 내용 번역 |
 | 전문용어 매핑 | 단어/문장 단위 용어 DB 관리, 도메인별 분류 |
 | 하이브리드 용어 적용 | Pre-translation(프롬프트 주입) + Post-translation(후처리 검증) |
@@ -25,6 +26,7 @@ Paper Translator는 ArXiv 등의 AI 연구 논문 PDF를 한국어로 번역하�
 | LLM | OpenAI GPT-4o-mini |
 | Orchestration | LangGraph |
 | PDF Parsing | PyPDF2 / pdfplumber |
+| Paper Discovery | arxiv (ArXiv API) / requests (Semantic Scholar API) |
 | Database | Supabase (PostgreSQL) |
 | Template | Jinja2 (Markdown 생성) |
 | CLI | Typer + Rich |
@@ -82,6 +84,42 @@ python scripts/seed_terminology.py
 ## 사용법
 
 ### CLI 명령어
+
+#### 논문 검색
+
+ArXiv 또는 Semantic Scholar에서 논문을 검색합니다:
+
+```bash
+# ArXiv에서 NLP 트렌딩 논문 검색
+python -m src.main discover --source arxiv --domain NLP --trending
+
+# ArXiv에서 키워드로 검색
+python -m src.main discover --source arxiv --query "transformer" --domain NLP
+
+# Semantic Scholar에서 고인용 논문 검색
+python -m src.main discover --source semantic-scholar --domain ML --highly-cited
+
+# 최소 인용수 필터링
+python -m src.main discover --source semantic-scholar --query "BERT" --min-citations 100
+
+# 상세 정보 표시
+python -m src.main discover --source arxiv --domain CV --trending --verbose
+```
+
+**검색 옵션:**
+
+| 옵션 | 설명 |
+|-----|------|
+| `--source` | 검색 소스: `arxiv`, `semantic-scholar` (또는 `s2`) |
+| `--query` | 검색어 |
+| `--domain` | 도메인 필터: NLP, CV, ML, RL, Speech, General |
+| `--max-results` | 최대 결과 수 (기본: 10) |
+| `--min-citations` | 최소 인용수 (Semantic Scholar 전용) |
+| `--year-from` | 시작 연도 필터 |
+| `--trending` | 트렌딩/최신 논문 조회 |
+| `--highly-cited` | 고인용 논문 조회 (Semantic Scholar 전용) |
+| `--verbose` | 상세 논문 정보 표시 |
+| `--json` | JSON 형식 출력 |
 
 #### 논문 번역
 
@@ -179,6 +217,9 @@ paper-translator/
 │   ├── api/                    # 외부 연동 인터페이스
 │   │   ├── interface.py        # TranslationRequest/Response
 │   │   └── insightbot.py       # InsightBot 연동
+│   ├── collectors/             # 논문 검색
+│   │   ├── arxiv_collector.py  # ArXiv API 클라이언트
+│   │   └── semantic_scholar_collector.py  # Semantic Scholar API
 │   ├── db/                     # 데이터베이스
 │   │   ├── supabase_client.py  # Supabase 클라이언트
 │   │   └── repositories.py     # CRUD 레포지토리
@@ -289,8 +330,11 @@ pytest tests/test_translator.py -v
 | SUPABASE_KEY | O | Supabase anon key |
 | SUPABASE_SERVICE_ROLE_KEY | - | Supabase service role key |
 | SUPABASE_DATABASE_URL | - | PostgreSQL 직접 연결 URL |
+| SEMANTIC_SCHOLAR_API_KEY | - | Semantic Scholar API 키 (요청 제한 완화) |
 | UPSTASH_URL | - | Redis 캐시 URL (선택) |
 | UPSTASH_TOKEN | - | Redis 인증 토큰 (선택) |
+
+> **참고:** Semantic Scholar API 키는 https://www.semanticscholar.org/product/api#api-key-form 에서 무료로 발급받을 수 있습니다.
 
 ## 데이터베이스 스키마
 
