@@ -18,6 +18,9 @@ pyyaml>=6.0.0
 # HTTP
 requests>=2.31.0
 
+# Paper Discovery
+arxiv>=2.1.0  # ArXiv API client
+
 # Template
 jinja2>=3.1.0
 

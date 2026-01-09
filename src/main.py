@@ -26,6 +26,12 @@ from src.feedback import (
     SyncAction,
     get_changed_files,
 )
+from src.collectors import (
+    ArxivCollector,
+    SemanticScholarCollector,
+    ArxivPaper,
+    SemanticScholarPaper,
+)
 
 # 콘솔 및 앱 초기화
 console = Console()
@@ -887,6 +893,281 @@ def info():
     table.add_row("파일명 형식", settings.filename_format)
 
     console.print(table)
+
+
+# === discover 명령어 ===
+
+def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
+    """ArXiv 논문 테이블 생성"""
+    table = Table(title=f"ArXiv 논문 ({len(papers)}개)", show_header=True, header_style="bold cyan")
+    table.add_column("#", style="dim", width=3)
+    table.add_column("제목", style="white", max_width=50)
+    table.add_column("저자", style="dim", max_width=25)
+    table.add_column("카테고리", style="yellow", width=10)
+    table.add_column("날짜", style="green", width=12)
+
+    for idx, paper in enumerate(papers, 1):
+        authors = ", ".join(paper.authors[:2])
+        if len(paper.authors) > 2:
+            authors += f" 외 {len(paper.authors) - 2}명"
+
+        table.add_row(
+            str(idx),
+            paper.title[:50] + "..." if len(paper.title) > 50 else paper.title,
+            authors[:25] + "..." if len(authors) > 25 else authors,
+            paper.primary_category,
+            paper.published.strftime("%Y-%m-%d"),
+        )
+
+    return table
+
+
+def create_semantic_scholar_table(papers: list[SemanticScholarPaper]) -> Table:
+    """Semantic Scholar 논문 테이블 생성"""
+    table = Table(title=f"Semantic Scholar 논문 ({len(papers)}개)", show_header=True, header_style="bold cyan")
+    table.add_column("#", style="dim", width=3)
+    table.add_column("제목", style="white", max_width=45)
+    table.add_column("저자", style="dim", max_width=20)
+    table.add_column("인용수", style="yellow", justify="right", width=8)
+    table.add_column("영향력", style="green", justify="right", width=8)
+    table.add_column("연도", style="cyan", width=6)
+
+    for idx, paper in enumerate(papers, 1):
+        authors = ", ".join(paper.authors[:2])
+        if len(paper.authors) > 2:
+            authors += f" 외 {len(paper.authors) - 2}명"
+
+        table.add_row(
+            str(idx),
+            paper.title[:45] + "..." if len(paper.title) > 45 else paper.title,
+            authors[:20] + "..." if len(authors) > 20 else authors,
+            f"{paper.citation_count:,}",
+            f"{paper.influential_citation_count:,}",
+            str(paper.year) if paper.year else "-",
+        )
+
+    return table
+
+
+@app.command("discover", help="논문 검색 및 발견")
+def discover(
+    source: str = typer.Option(
+        "arxiv", "--source", "-s",
+        help="검색 소스 (arxiv, semantic-scholar)"
+    ),
+    query: Optional[str] = typer.Option(
+        None, "--query", "-q",
+        help="검색어"
+    ),
+    domain: str = typer.Option(
+        "General", "--domain", "-d",
+        help="도메인 (NLP, CV, ML, RL, Speech, General)"
+    ),
+    max_results: int = typer.Option(
+        10, "--max-results", "-n",
+        help="최대 결과 수"
+    ),
+    min_citations: int = typer.Option(
+        0, "--min-citations", "-c",
+        help="최소 인용수 (Semantic Scholar 전용)"
+    ),
+    year_from: Optional[int] = typer.Option(
+        None, "--year-from", "-y",
+        help="시작 연도 필터"
+    ),
+    trending: bool = typer.Option(
+        False, "--trending", "-t",
+        help="인기/최신 논문 조회"
+    ),
+    highly_cited: bool = typer.Option(
+        False, "--highly-cited", "-h",
+        help="고인용 논문 조회 (Semantic Scholar 전용)"
+    ),
+    json_output: bool = typer.Option(
+        False, "--json",
+        help="JSON 형식 출력"
+    ),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v",
+        help="상세 정보 출력"
+    ),
+):
+    """
+    ArXiv 또는 Semantic Scholar에서 논문을 검색합니다.
+
+    사용 예시:
+
+        # ArXiv에서 transformer 검색
+        paper-translator discover --source arxiv --query "transformer" --domain NLP
+
+        # ArXiv 최신 트렌딩 논문
+        paper-translator discover --source arxiv --domain NLP --trending
+
+        # Semantic Scholar에서 고인용 논문 검색
+        paper-translator discover --source semantic-scholar --domain ML --highly-cited
+
+        # Semantic Scholar에서 인용수 100 이상 필터
+        paper-translator discover --source semantic-scholar --query "BERT" --min-citations 100
+    """
+    print_header("논문 검색")
+
+    source = source.lower()
+    valid_sources = ["arxiv", "semantic-scholar", "s2"]
+
+    if source not in valid_sources:
+        print_error(f"지원하지 않는 소스: {source}")
+        print_info(f"사용 가능한 소스: {', '.join(valid_sources)}")
+        raise typer.Exit(1)
+
+    # 검색어 또는 옵션 확인
+    if not query and not trending and not highly_cited:
+        print_error("--query, --trending, 또는 --highly-cited 중 하나를 지정해야 합니다.")
+        raise typer.Exit(1)
+
+    console.print(f"소스: [cyan]{source}[/cyan]")
+    console.print(f"도메인: [cyan]{domain}[/cyan]")
+    if query:
+        console.print(f"검색어: [cyan]{query}[/cyan]")
+    console.print()
+
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("[cyan]검색 중...", total=None)
+
+            # ArXiv 검색
+            if source == "arxiv":
+                collector = ArxivCollector(max_results=max_results)
+
+                if trending:
+                    papers = collector.get_trending(domain=domain, max_results=max_results)
+                elif query:
+                    papers = collector.search_by_domain(
+                        query=query,
+                        domain=domain,
+                        max_results=max_results,
+                    )
+                else:
+                    papers = collector.get_recent(domain=domain, max_results=max_results)
+
+                progress.update(task, completed=True)
+
+                if not papers:
+                    print_warning("검색 결과가 없습니다.")
+                    return
+
+                if json_output:
+                    console.print_json(data=[p.to_dict() for p in papers])
+                    return
+
+                console.print()
+                console.print(create_arxiv_table(papers))
+
+                # 상세 정보 출력
+                if verbose:
+                    console.print()
+                    for idx, paper in enumerate(papers, 1):
+                        console.print(Panel(
+                            f"[bold]제목:[/bold] {paper.title}\n"
+                            f"[bold]저자:[/bold] {', '.join(paper.authors)}\n"
+                            f"[bold]ArXiv ID:[/bold] {paper.arxiv_id}\n"
+                            f"[bold]카테고리:[/bold] {', '.join(paper.categories)}\n"
+                            f"[bold]게시일:[/bold] {paper.published.strftime('%Y-%m-%d')}\n"
+                            f"[bold]PDF:[/bold] {paper.pdf_url}\n\n"
+                            f"[bold]초록:[/bold]\n{paper.abstract[:500]}{'...' if len(paper.abstract) > 500 else ''}",
+                            title=f"[{idx}] 상세 정보",
+                            expand=False,
+                        ))
+
+            # Semantic Scholar 검색
+            else:  # semantic-scholar or s2
+                collector = SemanticScholarCollector(max_results=max_results)
+
+                if highly_cited:
+                    papers = collector.get_highly_cited(
+                        domain=domain,
+                        max_results=max_results,
+                        year_from=year_from,
+                        min_citations=max(min_citations, 100),  # 최소 100
+                    )
+                elif trending:
+                    papers = collector.get_influential(
+                        domain=domain,
+                        max_results=max_results,
+                        year_from=year_from,
+                    )
+                elif query:
+                    papers = collector.search_by_domain(
+                        query=query,
+                        domain=domain,
+                        max_results=max_results,
+                        year_from=year_from,
+                        min_citations=min_citations,
+                    )
+                else:
+                    papers = collector.search_by_domain(
+                        query=domain,
+                        domain=domain,
+                        max_results=max_results,
+                    )
+
+                progress.update(task, completed=True)
+
+                if not papers:
+                    print_warning("검색 결과가 없습니다.")
+                    return
+
+                if json_output:
+                    console.print_json(data=[p.to_dict() for p in papers])
+                    return
+
+                console.print()
+                console.print(create_semantic_scholar_table(papers))
+
+                # 상세 정보 출력
+                if verbose:
+                    console.print()
+                    for idx, paper in enumerate(papers, 1):
+                        arxiv_info = f"\n[bold]ArXiv ID:[/bold] {paper.arxiv_id}" if paper.arxiv_id else ""
+                        pdf_info = f"\n[bold]PDF:[/bold] {paper.pdf_url}" if paper.pdf_url else ""
+
+                        console.print(Panel(
+                            f"[bold]제목:[/bold] {paper.title}\n"
+                            f"[bold]저자:[/bold] {', '.join(paper.authors)}\n"
+                            f"[bold]연도:[/bold] {paper.year or 'N/A'}\n"
+                            f"[bold]인용수:[/bold] {paper.citation_count:,}\n"
+                            f"[bold]영향력 인용수:[/bold] {paper.influential_citation_count:,}\n"
+                            f"[bold]분야:[/bold] {', '.join(paper.fields_of_study) if paper.fields_of_study else 'N/A'}"
+                            f"{arxiv_info}{pdf_info}\n\n"
+                            f"[bold]초록:[/bold]\n{paper.abstract[:500] if paper.abstract else 'N/A'}{'...' if paper.abstract and len(paper.abstract) > 500 else ''}",
+                            title=f"[{idx}] 상세 정보",
+                            expand=False,
+                        ))
+
+        console.print()
+        print_success(f"{len(papers)}개 논문 발견")
+
+        # 번역 제안
+        console.print()
+        console.print("[dim]논문 번역하기:[/dim]")
+        if source == "arxiv" and papers:
+            sample = papers[0]
+            console.print(f"  [dim]paper-translator translate --arxiv-id {sample.arxiv_id} --domain {domain}[/dim]")
+        elif papers and papers[0].arxiv_id:
+            sample = papers[0]
+            console.print(f"  [dim]paper-translator translate --arxiv-id {sample.arxiv_id} --domain {domain}[/dim]")
+
+    except KeyboardInterrupt:
+        print_warning("\n검색이 중단되었습니다.")
+        raise typer.Exit(130)
+    except Exception as e:
+        print_error(f"검색 실패: {e}")
+        if verbose:
+            console.print_exception()
+        raise typer.Exit(1)
 
 
 # === 메인 엔트리 ===
