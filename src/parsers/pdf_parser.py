@@ -39,12 +39,15 @@ class ParsedPaper:
 class PDFParser:
     """PDF 파서 클래스"""
 
-    # ArXiv PDF URL 패턴
+    # ArXiv PDF URL 패턴 (버전 접미사 v1, v2 등 포함)
     ARXIV_PDF_PATTERNS = [
-        r"arxiv\.org/pdf/(\d+\.\d+)",  # https://arxiv.org/pdf/1706.03762
-        r"arxiv\.org/abs/(\d+\.\d+)",  # https://arxiv.org/abs/1706.03762
-        r"ar5iv\.labs\.arxiv\.org/html/(\d+\.\d+)",  # ar5iv HTML
+        r"arxiv\.org/pdf/(\d+\.\d+(?:v\d+)?)",  # https://arxiv.org/pdf/1706.03762 or 2601.05249v1
+        r"arxiv\.org/abs/(\d+\.\d+(?:v\d+)?)",  # https://arxiv.org/abs/1706.03762
+        r"ar5iv\.labs\.arxiv\.org/html/(\d+\.\d+(?:v\d+)?)",  # ar5iv HTML
     ]
+
+    # ArXiv ID 패턴 (직접 입력용)
+    ARXIV_ID_PATTERN = r"^\d+\.\d+(?:v\d+)?$"  # 1706.03762 or 2601.05249v1
 
     # 섹션 헤더 패턴
     SECTION_PATTERNS = [
@@ -71,8 +74,8 @@ class PDFParser:
     @staticmethod
     def extract_arxiv_id(url_or_id: str) -> Optional[str]:
         """URL 또는 ID에서 ArXiv ID 추출"""
-        # 이미 ID 형식인 경우
-        if re.match(r"^\d+\.\d+$", url_or_id):
+        # 이미 ID 형식인 경우 (버전 접미사 포함)
+        if re.match(PDFParser.ARXIV_ID_PATTERN, url_or_id):
             return url_or_id
 
         # URL에서 추출
@@ -82,6 +85,11 @@ class PDFParser:
                 return match.group(1)
 
         return None
+
+    @staticmethod
+    def is_arxiv_id(source: str) -> bool:
+        """ArXiv ID 형식인지 확인"""
+        return bool(re.match(PDFParser.ARXIV_ID_PATTERN, source))
 
     @staticmethod
     def arxiv_id_to_pdf_url(arxiv_id: str) -> str:
@@ -309,7 +317,8 @@ class PDFParser:
             arxiv_id = self.extract_arxiv_id(source)
             pdf_bytes = self.download_pdf(source)
             source_path = source
-        elif re.match(r"^\d+\.\d+$", source):
+        elif self.is_arxiv_id(source):
+            # ArXiv ID 형식 (버전 접미사 포함)
             arxiv_id = source
             pdf_bytes = self.download_pdf(self.arxiv_id_to_pdf_url(source))
             source_path = self.arxiv_id_to_pdf_url(source)

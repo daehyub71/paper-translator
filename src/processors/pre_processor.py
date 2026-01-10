@@ -2,13 +2,15 @@
 Pre-processor 모듈
 번역 전 청크에 용어 프롬프트를 주입하는 전처리 로직
 """
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Optional
 
-from src.db.repositories import TerminologyRepository
 from src.utils import settings
 from .chunker import Chunk
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,10 +68,19 @@ class PreProcessor:
             용어 목록
         """
         if self._term_cache is None or force_refresh:
-            self._term_cache = TerminologyRepository.get_all(
-                domain=self.domain,
-                limit=1000  # 충분히 큰 수
-            )
+            try:
+                # 지연 임포트로 DB 연결 문제 격리
+                from src.db.repositories import TerminologyRepository
+                logger.debug("DB에서 용어 목록 조회 중...")
+                self._term_cache = TerminologyRepository.get_all(
+                    domain=self.domain,
+                    limit=1000  # 충분히 큰 수
+                )
+                logger.debug(f"용어 {len(self._term_cache)}개 로드 완료")
+            except Exception as e:
+                # DB 연결 실패 시 빈 목록으로 진행
+                logger.warning(f"DB 용어 조회 실패, 빈 목록으로 진행: {e}")
+                self._term_cache = []
         return self._term_cache
 
     def get_terms_by_domain(self, domain: str) -> list[dict]:
@@ -82,7 +93,12 @@ class PreProcessor:
         Returns:
             해당 도메인의 용어 목록
         """
-        return TerminologyRepository.get_all(domain=domain, limit=500)
+        try:
+            from src.db.repositories import TerminologyRepository
+            return TerminologyRepository.get_all(domain=domain, limit=500)
+        except Exception as e:
+            logger.warning(f"DB 용어 조회 실패 (도메인: {domain}): {e}")
+            return []
 
     def find_matching_terms(
         self,
@@ -249,8 +265,16 @@ class PreProcessor:
             ProcessedChunk 목록
         """
         processed = []
+        total = len(chunks)
+        logger.info(f"전처리 시작: {total}개 청크")
 
-        for chunk in chunks:
+        # 용어 미리 로드 (한 번만)
+        _ = self.get_all_terms()
+
+        for i, chunk in enumerate(chunks):
+            if (i + 1) % 10 == 0 or i == 0:
+                logger.debug(f"전처리 진행: {i + 1}/{total}")
+
             processed_chunk = self.process_chunk(
                 chunk=chunk,
                 paper_title=paper_title,
@@ -258,6 +282,7 @@ class PreProcessor:
             )
             processed.append(processed_chunk)
 
+        logger.info(f"전처리 완료: {total}개 청크")
         return processed
 
     def get_unique_terms_from_chunks(

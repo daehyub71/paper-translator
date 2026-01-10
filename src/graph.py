@@ -43,8 +43,8 @@ def fetch_pdf(state: TranslationState) -> TranslationState:
         if source.startswith("http"):
             logger.info(f"URL에서 PDF 다운로드: {source}")
             pdf_bytes = parser.download_pdf(source)
-        elif source.replace(".", "").replace("/", "").isdigit():
-            # ArXiv ID 형식 (예: 1706.03762)
+        elif parser.is_arxiv_id(source):
+            # ArXiv ID 형식 (예: 1706.03762, 2601.05249v1)
             logger.info(f"ArXiv ID에서 PDF 다운로드: {source}")
             url = parser.arxiv_id_to_pdf_url(source)
             pdf_bytes = parser.download_pdf(url)

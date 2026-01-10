@@ -104,6 +104,12 @@ python -m src.main discover --source semantic-scholar --query "BERT" --min-citat
 
 # Show detailed information
 python -m src.main discover --source arxiv --domain CV --trending --verbose
+
+# Pagination - view page 2 with 10 results per page
+python -m src.main discover --source arxiv --domain NLP --trending --page 2
+
+# Custom page size (5 per page, page 3)
+python -m src.main discover --source arxiv --domain NLP --trending --per-page 5 --page 3
 ```
 
 **Discover Options:**
@@ -113,13 +119,20 @@ python -m src.main discover --source arxiv --domain CV --trending --verbose
 | `--source` | Search source: `arxiv`, `semantic-scholar` (or `s2`) |
 | `--query` | Search query |
 | `--domain` | Domain filter: NLP, CV, ML, RL, Speech, General |
-| `--max-results` | Maximum results (default: 10) |
+| `--page`, `-p` | Page number (default: 1) |
+| `--per-page` | Results per page (default: 10) |
+| `--max-results`, `-n` | Maximum total results (default: 100) |
 | `--min-citations` | Minimum citations (Semantic Scholar only) |
 | `--year-from` | Filter by start year |
 | `--trending` | Get trending/recent papers |
 | `--highly-cited` | Get highly cited papers (Semantic Scholar only) |
 | `--verbose` | Show detailed paper information |
 | `--json` | Output as JSON |
+
+**Output Features:**
+- Both ArXiv and Semantic Scholar results display **ArXiv ID** column for easy reference
+- Pagination info shown at bottom (e.g., "Page 1/5 (50 total results)")
+- Next page command suggestion when more pages available
 
 #### Translate Papers
 

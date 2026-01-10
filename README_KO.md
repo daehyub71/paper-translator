@@ -104,6 +104,12 @@ python -m src.main discover --source semantic-scholar --query "BERT" --min-citat
 
 # 상세 정보 표시
 python -m src.main discover --source arxiv --domain CV --trending --verbose
+
+# 페이지네이션 - 2페이지 조회 (페이지당 10개)
+python -m src.main discover --source arxiv --domain NLP --trending --page 2
+
+# 페이지당 개수 지정 (5개씩, 3페이지)
+python -m src.main discover --source arxiv --domain NLP --trending --per-page 5 --page 3
 ```
 
 **검색 옵션:**
@@ -113,13 +119,20 @@ python -m src.main discover --source arxiv --domain CV --trending --verbose
 | `--source` | 검색 소스: `arxiv`, `semantic-scholar` (또는 `s2`) |
 | `--query` | 검색어 |
 | `--domain` | 도메인 필터: NLP, CV, ML, RL, Speech, General |
-| `--max-results` | 최대 결과 수 (기본: 10) |
+| `--page`, `-p` | 페이지 번호 (기본: 1) |
+| `--per-page` | 페이지당 결과 수 (기본: 10) |
+| `--max-results`, `-n` | 최대 전체 결과 수 (기본: 100) |
 | `--min-citations` | 최소 인용수 (Semantic Scholar 전용) |
 | `--year-from` | 시작 연도 필터 |
 | `--trending` | 트렌딩/최신 논문 조회 |
 | `--highly-cited` | 고인용 논문 조회 (Semantic Scholar 전용) |
 | `--verbose` | 상세 논문 정보 표시 |
 | `--json` | JSON 형식 출력 |
+
+**출력 기능:**
+- ArXiv와 Semantic Scholar 모두 **ArXiv ID** 컬럼 표시 (번역 시 편리한 참조용)
+- 페이지 정보 하단 표시 (예: "페이지 1/5 (총 50개 결과)")
+- 다음 페이지가 있을 경우 다음 페이지 명령어 안내
 
 #### 논문 번역
 

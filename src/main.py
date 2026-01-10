@@ -898,7 +898,7 @@ def info():
 
 # === discover 명령어 ===
 
-def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
+def create_arxiv_table(papers: list[ArxivPaper], start_idx: int = 0) -> Table:
     """ArXiv 논문 테이블 생성"""
     table = Table(title=f"ArXiv 논문 ({len(papers)}개)", show_header=True, header_style="bold cyan")
     table.add_column("#", style="dim", width=3)
@@ -908,7 +908,7 @@ def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
     table.add_column("카테고리", style="yellow", width=8)
     table.add_column("날짜", style="green", width=10)
 
-    for idx, paper in enumerate(papers, 1):
+    for idx, paper in enumerate(papers, start_idx + 1):
         authors = ", ".join(paper.authors[:2])
         if len(paper.authors) > 2:
             authors += f" 외 {len(paper.authors) - 2}명"
@@ -925,25 +925,46 @@ def create_arxiv_table(papers: list[ArxivPaper]) -> Table:
     return table
 
 
-def create_semantic_scholar_table(papers: list[SemanticScholarPaper]) -> Table:
+def paginate_results(papers: list, page: int, per_page: int) -> tuple[list, int, int]:
+    """
+    결과를 페이지네이션합니다.
+
+    Returns:
+        (현재 페이지 논문 목록, 총 페이지 수, 시작 인덱스)
+    """
+    total = len(papers)
+    total_pages = (total + per_page - 1) // per_page  # ceiling division
+
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+
+    return papers[start_idx:end_idx], total_pages, start_idx
+
+
+def create_semantic_scholar_table(papers: list[SemanticScholarPaper], start_idx: int = 0) -> Table:
     """Semantic Scholar 논문 테이블 생성"""
     table = Table(title=f"Semantic Scholar 논문 ({len(papers)}개)", show_header=True, header_style="bold cyan")
     table.add_column("#", style="dim", width=3)
-    table.add_column("제목", style="white", max_width=45)
-    table.add_column("저자", style="dim", max_width=20)
+    table.add_column("ArXiv ID", style="cyan", width=15)
+    table.add_column("제목", style="white", max_width=40)
+    table.add_column("저자", style="dim", max_width=18)
     table.add_column("인용수", style="yellow", justify="right", width=8)
     table.add_column("영향력", style="green", justify="right", width=8)
     table.add_column("연도", style="cyan", width=6)
 
-    for idx, paper in enumerate(papers, 1):
+    for idx, paper in enumerate(papers, start_idx + 1):
         authors = ", ".join(paper.authors[:2])
         if len(paper.authors) > 2:
             authors += f" 외 {len(paper.authors) - 2}명"
 
+        # ArXiv ID 표시 (없으면 "-")
+        arxiv_display = paper.arxiv_id if paper.arxiv_id else "-"
+
         table.add_row(
             str(idx),
-            paper.title[:45] + "..." if len(paper.title) > 45 else paper.title,
-            authors[:20] + "..." if len(authors) > 20 else authors,
+            arxiv_display,
+            paper.title[:40] + "..." if len(paper.title) > 40 else paper.title,
+            authors[:18] + "..." if len(authors) > 18 else authors,
             f"{paper.citation_count:,}",
             f"{paper.influential_citation_count:,}",
             str(paper.year) if paper.year else "-",
@@ -966,9 +987,17 @@ def discover(
         "General", "--domain", "-d",
         help="도메인 (NLP, CV, ML, RL, Speech, General)"
     ),
+    page: int = typer.Option(
+        1, "--page", "-p",
+        help="페이지 번호 (1부터 시작)"
+    ),
+    per_page: int = typer.Option(
+        10, "--per-page",
+        help="페이지당 결과 수 (기본: 10)"
+    ),
     max_results: int = typer.Option(
-        10, "--max-results", "-n",
-        help="최대 결과 수"
+        100, "--max-results", "-n",
+        help="최대 결과 수 (전체)"
     ),
     min_citations: int = typer.Option(
         0, "--min-citations", "-c",
@@ -1011,6 +1040,9 @@ def discover(
 
         # Semantic Scholar에서 인용수 100 이상 필터
         paper-translator discover --source semantic-scholar --query "BERT" --min-citations 100
+
+        # 페이지네이션 (2페이지 조회)
+        paper-translator discover --source arxiv --domain NLP --trending --page 2
     """
     print_header("논문 검색")
 
@@ -1027,10 +1059,19 @@ def discover(
         print_error("--query, --trending, 또는 --highly-cited 중 하나를 지정해야 합니다.")
         raise typer.Exit(1)
 
+    # 페이지 유효성 검사
+    if page < 1:
+        print_error("페이지 번호는 1 이상이어야 합니다.")
+        raise typer.Exit(1)
+    if per_page < 1 or per_page > 100:
+        print_error("페이지당 결과 수는 1~100 사이여야 합니다.")
+        raise typer.Exit(1)
+
     console.print(f"소스: [cyan]{source}[/cyan]")
     console.print(f"도메인: [cyan]{domain}[/cyan]")
     if query:
         console.print(f"검색어: [cyan]{query}[/cyan]")
+    console.print(f"페이지: [cyan]{page}[/cyan] (페이지당 {per_page}개)")
     console.print()
 
     try:
@@ -1062,17 +1103,28 @@ def discover(
                     print_warning("검색 결과가 없습니다.")
                     return
 
+                # 전체 결과 저장 (페이지네이션용)
+                all_papers = papers
+                total_count = len(all_papers)
+
+                # 페이지네이션 적용
+                papers, total_pages, start_idx = paginate_results(all_papers, page, per_page)
+
+                if not papers:
+                    print_warning(f"페이지 {page}에 결과가 없습니다. (총 {total_pages}페이지)")
+                    return
+
                 if json_output:
                     console.print_json(data=[p.to_dict() for p in papers])
                     return
 
                 console.print()
-                console.print(create_arxiv_table(papers))
+                console.print(create_arxiv_table(papers, start_idx))
 
                 # 상세 정보 출력
                 if verbose:
                     console.print()
-                    for idx, paper in enumerate(papers, 1):
+                    for idx, paper in enumerate(papers, start_idx + 1):
                         console.print(Panel(
                             f"[bold]제목:[/bold] {paper.title}\n"
                             f"[bold]저자:[/bold] {', '.join(paper.authors)}\n"
@@ -1084,6 +1136,19 @@ def discover(
                             title=f"[{idx}] 상세 정보",
                             expand=False,
                         ))
+
+                # 페이지 정보 출력
+                console.print()
+                console.print(f"[dim]페이지 {page}/{total_pages} (총 {total_count}개 결과)[/dim]")
+
+                if page < total_pages:
+                    next_cmd = f"paper-translator discover --source arxiv"
+                    if query:
+                        next_cmd += f' --query "{query}"'
+                    next_cmd += f" --domain {domain} --page {page + 1}"
+                    if trending:
+                        next_cmd += " --trending"
+                    console.print(f"[dim]다음 페이지: {next_cmd}[/dim]")
 
             # Semantic Scholar 검색
             else:  # semantic-scholar or s2
@@ -1123,17 +1188,28 @@ def discover(
                     print_warning("검색 결과가 없습니다.")
                     return
 
+                # 전체 결과 저장 (페이지네이션용)
+                all_papers = papers
+                total_count = len(all_papers)
+
+                # 페이지네이션 적용
+                papers, total_pages, start_idx = paginate_results(all_papers, page, per_page)
+
+                if not papers:
+                    print_warning(f"페이지 {page}에 결과가 없습니다. (총 {total_pages}페이지)")
+                    return
+
                 if json_output:
                     console.print_json(data=[p.to_dict() for p in papers])
                     return
 
                 console.print()
-                console.print(create_semantic_scholar_table(papers))
+                console.print(create_semantic_scholar_table(papers, start_idx))
 
                 # 상세 정보 출력
                 if verbose:
                     console.print()
-                    for idx, paper in enumerate(papers, 1):
+                    for idx, paper in enumerate(papers, start_idx + 1):
                         arxiv_info = f"\n[bold]ArXiv ID:[/bold] {paper.arxiv_id}" if paper.arxiv_id else ""
                         pdf_info = f"\n[bold]PDF:[/bold] {paper.pdf_url}" if paper.pdf_url else ""
 
@@ -1150,8 +1226,23 @@ def discover(
                             expand=False,
                         ))
 
+                # 페이지 정보 출력
+                console.print()
+                console.print(f"[dim]페이지 {page}/{total_pages} (총 {total_count}개 결과)[/dim]")
+
+                if page < total_pages:
+                    next_cmd = f"paper-translator discover --source semantic-scholar"
+                    if query:
+                        next_cmd += f' --query "{query}"'
+                    next_cmd += f" --domain {domain} --page {page + 1}"
+                    if highly_cited:
+                        next_cmd += " --highly-cited"
+                    if trending:
+                        next_cmd += " --trending"
+                    console.print(f"[dim]다음 페이지: {next_cmd}[/dim]")
+
         console.print()
-        print_success(f"{len(papers)}개 논문 발견")
+        print_success(f"{len(papers)}개 논문 표시 (현재 페이지)")
 
         # 번역 제안
         console.print()
